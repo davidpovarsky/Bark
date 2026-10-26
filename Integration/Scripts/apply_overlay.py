@@ -33,7 +33,7 @@ pbx = project.read_text(encoding='utf-8')
 # Deflector uses iOS 26 IntentModes and modern SwiftUI throughout.
 # The integrated app and extensions must all use iOS 26+, not Bark's iOS 15.
 import re
-pbx, target_count = re.subn(r'IPHONEOS_DEPLOYMENT_TARGET = (?:15[.]0|17[.]0|26[.]0|27[.]0);', 'IPHONEOS_DEPLOYMENT_TARGET = 27.0;', pbx)
+pbx, target_count = re.subn(r'IPHONEOS_DEPLOYMENT_TARGET = (?:15[.]0|17[.]0|26[.]0|26[.]2|27[.]0);', 'IPHONEOS_DEPLOYMENT_TARGET = 26.2;', pbx)
 assert target_count >= 10, f'Expected Bark deployment settings, found {target_count}'
 marker = '0661A543204FDA4100965E4E /* AppDelegate.swift in Sources */'
 assert pbx.count(marker) >= 2, 'AppDelegate source reference changed'
