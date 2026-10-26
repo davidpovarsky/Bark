@@ -27,14 +27,6 @@ struct HubShortcutIntent: AppIntent {
 }
 
 @available(iOS 17.0, *)
-struct HubActivityAttributes: ActivityAttributes {
-    struct ContentState: Codable, Hashable {
-        var shortcuts: [String]
-    }
-    var title: String
-}
-
-@available(iOS 17.0, *)
 struct HubLiveActivityWidget: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: HubActivityAttributes.self) { context in
