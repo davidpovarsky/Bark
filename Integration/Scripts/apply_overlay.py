@@ -36,10 +36,16 @@ files = [
     ('HubSharedActivity', 'A1B2C3D4E5F607182930AB01', 'A1B2C3D4E5F607182930AC01'),
     ('HubActivityManager', 'A1B2C3D4E5F607182930AB02', 'A1B2C3D4E5F607182930AC02'),
     ('HubControlIntents', 'A1B2C3D4E5F607182930AB03', 'A1B2C3D4E5F607182930AC03'),
+    ('DeflectorAutomationDetect', 'A1B2C3D4E5F607182930AB04', 'A1B2C3D4E5F607182930AC04'),
 ]
+original_automation = root / 'Vendor' / 'Deflector' / 'Deflector' / 'Deflector' / 'AppIntents' / 'SystemIntents' / 'SystemAutomationDetectIntent.swift'
+assert original_automation.exists(), 'Deflector automation callback moved upstream'
+# Keep vendor code byte-for-byte identical; materialize only into generated app source.
+
 for name, file_id, build_id in files:
     generated = app / (name + '.generated.swift')
-    shutil.copyfile(integration / 'App' / (name + '.swift'), generated)
+    source = original_automation if name == 'DeflectorAutomationDetect' else integration / 'App' / (name + '.swift')
+    shutil.copyfile(source, generated)
     if file_id in pbx:
         continue
     # Add to PBXFileReference and PBXBuildFile sections, Bark group and Bark target Sources.
