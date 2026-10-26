@@ -41,6 +41,7 @@ for source in sources:
     # Explicit color resolves SwiftUI's ambiguous inferred ShapeStyle in Bark.
     if relative.startswith("Deflector/Views/"):
         content = content.replace(".accent", "Color.accentColor")
+        content = content.replace(".dropblue", 'Color(red: 0.2, green: 0.4, blue: 1.0)')
     dest.write_text(content, encoding="utf-8")
     file_id = hashlib.sha256(("file:" + relative).encode()).hexdigest()[:24].upper()
     build_id = hashlib.sha256(("build:" + relative).encode()).hexdigest()[:24].upper()
