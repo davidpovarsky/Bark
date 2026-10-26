@@ -13,6 +13,10 @@ jobs:
           xcode-version: latest-stable
       - name: Generate integration overlay
         run: python3 Integration/Scripts/apply_overlay.py
+      - name: Verify selective notification cleanup overlay
+        run: |
+          python3 Integration/Scripts/verify_cleanup_overlay.py
+          git diff --exit-code -- Vendor/Deflector
       - name: Install CocoaPods
         run: pod install
       - name: Build iOS simulator without signing

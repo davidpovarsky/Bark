@@ -39,6 +39,7 @@ files = [
     ('HubActivityManager', 'A1B2C3D4E5F607182930AB02', 'A1B2C3D4E5F607182930AC02'),
     ('HubControlIntents', 'A1B2C3D4E5F607182930AB03', 'A1B2C3D4E5F607182930AC03'),
     ('DeflectorAutomationDetect', 'A1B2C3D4E5F607182930AB04', 'A1B2C3D4E5F607182930AC04'),
+    ('HubNotificationCleanup', 'A1B2C3D4E5F607182930AB05', 'A1B2C3D4E5F607182930AC05'),
 ]
 original_automation = root / 'Vendor' / 'Deflector' / 'Deflector' / 'Deflector' / 'AppIntents' / 'SystemIntents' / 'SystemAutomationDetectIntent.swift'
 assert original_automation.exists(), 'Deflector automation callback moved upstream'
@@ -51,6 +52,9 @@ for name, file_id, build_id in files:
     if name == 'DeflectorAutomationDetect':
         content = generated.read_text(encoding='utf-8')
         content = content.replace('struct SystemAutomationDetectIntent: AppIntent {', '@available(iOS 26.0, *)\nstruct SystemAutomationDetectIntent: AppIntent {')
+        old_cleanup = 'UNUserNotificationCenter.current().removeAllDeliveredNotifications()'
+        assert content.count(old_cleanup) == 1, 'Deflector callback cleanup changed upstream; inspect before integration'
+        content = content.replace(old_cleanup, 'await HubNotificationCleanup.removeDeflection()')
         generated.write_text(content, encoding='utf-8')
     if file_id in pbx:
         continue
@@ -75,6 +79,13 @@ originals = {
 for name, relative in originals.items():
     upstream = root / 'Vendor' / 'Deflector' / 'Deflector' / relative
     assert upstream.exists(), f'Deflector upstream path changed: {relative}'
-    shutil.copyfile(upstream, widget / (name + '.upstream.generated.swift'))
+    output = widget / (name + '.upstream.generated.swift')
+    shutil.copyfile(upstream, output)
+    if name == 'DeflectionService':
+        content = output.read_text(encoding='utf-8')
+        needle = 'content.title = "Deflection"'
+        assert content.count(needle) == 1, 'Deflector notification creation changed upstream; inspect before integration'
+        content = content.replace(needle, needle + '\n        content.userInfo[ "shortcutsHub.origin" ] = "Deflector"')
+        output.write_text(content, encoding='utf-8')
 
 print('Generated app, widget, ActivityKit, intent and original Deflector source overlays.')

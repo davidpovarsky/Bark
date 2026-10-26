@@ -26,11 +26,17 @@ struct StopHubActivityIntent: AppIntent {
 struct HubAutomationAcknowledgedIntent: AppIntent {
     static let title: LocalizedStringResource = "Acknowledge Shortcuts Hub Automation"
     static var openAppWhenRun: Bool = false
+
+    @Parameter(title: "Notification Identifier")
+    var notificationIdentifier: String?
+
+    init() {}
+    init(notificationIdentifier: String?) {
+        self.notificationIdentifier = notificationIdentifier
+    }
+
     func perform() async throws -> some IntentResult {
-        let center = UNUserNotificationCenter.current()
-        let notifications = await center.deliveredNotifications()
-        let ids = notifications.filter { $0.request.content.title == "Deflection" }.map { $0.request.identifier }
-        center.removeDeliveredNotifications(withIdentifiers: ids)
+        await HubNotificationCleanup.removeDeflection(identifier: notificationIdentifier)
         return .result()
     }
 }
