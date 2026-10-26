@@ -27,3 +27,24 @@ jobs:
         run: |
           set -o pipefail
           xcodebuild -workspace Bark.xcworkspace -scheme Bark -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+      - name: Build unsigned iOS device app
+        run: |
+          set -euo pipefail
+          xcodebuild -workspace Bark.xcworkspace -scheme Bark -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/BarkDeviceBuild" CODE_SIGNING_ALLOWED=NO build
+      - name: Package unsigned IPA with extensions
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/BarkDeviceBuild/Build/Products/Release-iphoneos/Bark.app"
+          test -d "$APP"
+          mkdir -p "$RUNNER_TEMP/BarkPayload/Payload"
+          ditto "$APP" "$RUNNER_TEMP/BarkPayload/Payload/Bark.app"
+          cd "$RUNNER_TEMP/BarkPayload"
+          zip -qry "$GITHUB_WORKSPACE/Bark-Deflector-iOS-unsigned.ipa" Payload
+          unzip -t "$GITHUB_WORKSPACE/Bark-Deflector-iOS-unsigned.ipa" | tail -n 1
+      - name: Upload unsigned IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bark-Deflector-iOS-unsigned-IPA
+          path: Bark-Deflector-iOS-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
