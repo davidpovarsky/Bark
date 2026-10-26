@@ -1,0 +1,21 @@
+name: Layered Integration iOS Build
+on:
+  push:
+    branches: [feature/source-layered-integration]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Generate integration overlay
+        run: python3 Integration/Scripts/apply_overlay.py
+      - name: Install CocoaPods
+        run: pod install
+      - name: Build iOS simulator without signing
+        run: |
+          set -o pipefail
+          xcodebuild -workspace Bark.xcworkspace -scheme Bark -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
