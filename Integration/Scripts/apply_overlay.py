@@ -52,4 +52,17 @@ for name, file_id, build_id in files:
     assert pbx.count(sources_needle) == 1
     pbx = pbx.replace(sources_needle, sources_needle + f'\n\t\t\t\t{build_id} /* {name}.generated.swift in Sources */,')
 project.write_text(pbx, encoding='utf-8')
-print('Generated app, widget, ActivityKit and intent overlays.')
+
+# Compile selected original Deflector files, not reimplemented copies.
+# The widget target uses Xcode's filesystem-synchronized Widget directory.
+originals = {
+    'DeflectionService': 'Shared/Models/Services/DeflectionService.swift',
+    'SendDeflectionNotificationIntent': 'Shared/AppIntents/SendDeflectionNotificationIntent.swift',
+    'UserNotificationSupport': 'Shared/Models/Supports/UserNotificationSupport.swift',
+}
+for name, relative in originals.items():
+    upstream = root / 'Vendor' / 'Deflector' / 'Deflector' / relative
+    assert upstream.exists(), f'Deflector upstream path changed: {relative}'
+    shutil.copyfile(upstream, widget / (name + '.upstream.generated.swift'))
+
+print('Generated app, widget, ActivityKit, intent and original Deflector source overlays.')

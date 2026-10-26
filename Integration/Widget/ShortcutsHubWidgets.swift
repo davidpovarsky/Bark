@@ -1,30 +1,12 @@
-// Integration-owned adapter. Upstream Bark and Deflector files are untouched.
+﻿// Integration-owned adapter. Upstream Bark and Deflector files are untouched.
 import ActivityKit
 import AppIntents
 import SwiftUI
 import WidgetKit
 import UserNotifications
 
-@available(iOS 17.0, *)
-struct HubShortcutIntent: AppIntent {
-    static let title: LocalizedStringResource = "Trigger Shortcut Automation"
-    static var openAppWhenRun: Bool = false
-    @Parameter(title: "Shortcut Name") var shortcutName: String
-    init() {}
-    init(shortcutName: String) { self.shortcutName = shortcutName }
-    func perform() async throws -> some IntentResult {
-        guard !shortcutName.isEmpty else { return .result() }
-        let content = UNMutableNotificationContent()
-        content.title = "Deflection"
-        content.body = shortcutName
-        content.sound = nil
-        content.interruptionLevel = .timeSensitive
-        try await UNUserNotificationCenter.current().add(
-            UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-        )
-        return .result()
-    }
-}
+// Deflector's original SendDeflectionNotificationIntent and DeflectionService are
+// compiled from Vendor/Deflector by the integration build overlay.
 
 @available(iOS 17.0, *)
 struct HubLiveActivityWidget: Widget {
@@ -34,7 +16,7 @@ struct HubLiveActivityWidget: Widget {
                 Text(context.attributes.title).font(.headline)
                 HStack {
                     ForEach(context.state.shortcuts, id: \.self) { name in
-                        Button(intent: HubShortcutIntent(shortcutName: name)) {
+                        Button(intent: SendDeflectionNotificationIntent(shortcutName: name)) {
                             Text(name).lineLimit(1)
                         }.buttonStyle(.bordered)
                     }
@@ -47,7 +29,7 @@ struct HubLiveActivityWidget: Widget {
                 DynamicIslandExpandedRegion(.center) {
                     HStack {
                         ForEach(context.state.shortcuts, id: \.self) { name in
-                            Button(intent: HubShortcutIntent(shortcutName: name)) { Text(name) }
+                            Button(intent: SendDeflectionNotificationIntent(shortcutName: name)) { Text(name) }
                         }
                     }
                 }
@@ -79,8 +61,8 @@ struct HubShortcutWidget: Widget {
             VStack {
                 Text("Shortcuts Hub").font(.headline)
                 HStack {
-                    Button(intent: HubShortcutIntent(shortcutName: "backup")) { Label("Backup", systemImage: "externaldrive") }
-                    Button(intent: HubShortcutIntent(shortcutName: "lights")) { Label("Lights", systemImage: "lightbulb") }
+                    Button(intent: SendDeflectionNotificationIntent(shortcutName: "backup")) { Label("Backup", systemImage: "externaldrive") }
+                    Button(intent: SendDeflectionNotificationIntent(shortcutName: "lights")) { Label("Lights", systemImage: "lightbulb") }
                 }.buttonStyle(.borderless)
             }.containerBackground(for: .widget) { Color(.systemBackground) }
         }
@@ -89,3 +71,4 @@ struct HubShortcutWidget: Widget {
         .supportedFamilies([.systemMedium])
     }
 }
+
