@@ -8,6 +8,14 @@ root = Path(__file__).resolve().parents[2]
 widget = root / 'Widget'
 app = root / 'Bark'
 integration = root / 'Integration'
+# Select the private Cloudflare Bark server for fresh installs without changing
+# existing users' saved server choices. This patch is generated at build time.
+server_manager = root / 'Common' / 'ServerManager.swift'
+server_code = server_manager.read_text(encoding='utf-8')
+upstream_server = 'let defaultServer = "https://api.day.app"'
+private_server = 'let defaultServer = "https://bark-worker.davidpovarski1.workers.dev"'
+assert upstream_server in server_code or private_server in server_code, 'Upstream default server changed'
+server_manager.write_text(server_code.replace(upstream_server, private_server), encoding='utf-8')
 shutil.copyfile(integration / 'Widget' / 'ShortcutsHubWidgets.swift', widget / 'ShortcutsHubWidgets.generated.swift')
 shutil.copyfile(integration / 'App' / 'HubSharedActivity.swift', widget / 'HubSharedActivity.generated.swift')
 
