@@ -21,7 +21,7 @@ ipad_model = root / "Controller" / "SectionViewModel-iPad.swift"
 # its application entry point in the generated copy.
 sources = list((vendor / "Deflector").rglob("*.swift"))
 sources += list((vendor / "Shared").rglob("*.swift"))
-skip = {"SystemAutomationDetectIntent.swift", "SendDeflectionNotificationIntent.swift", "DeflectionService.swift", "UserNotificationSupport.swift"}
+skip = {"SystemAutomationDetectIntent.swift", "SendDeflectionNotificationIntent.swift", "DeflectionService.swift"}
 sources = [p for p in sources if p.name not in skip]
 sources.append(root / "Integration" / "App" / "ShortcutsHubNavigation.swift")
 for source in sources:
