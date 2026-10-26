@@ -123,7 +123,30 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
         }
     }
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
+        // Best effort only: iOS does not guarantee execution after the app is suspended.
+        // Opt-in per push: autoDismiss=2 (seconds, bounded to 1...60).
+        if let seconds = Self.autoDismissSeconds(notification.request.content.userInfo) {
+            let identifier = notification.request.identifier
+            Task {
+                try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [identifier])
+            }
+        }
         return .alert
+    }
+
+    private static func autoDismissSeconds(_ userInfo: [AnyHashable: Any]) -> Double? {
+        let raw = userInfo["autoDismiss"]
+        let value: Double?
+        if let number = raw as? NSNumber {
+            value = number.doubleValue
+        } else if let string = raw as? String {
+            value = Double(string)
+        } else {
+            value = nil
+        }
+        guard let value = value, value.isFinite, (1...60).contains(value) else { return nil }
+        return value
     }
     
     func handleNotification(userInfo: [AnyHashable: Any]) {
