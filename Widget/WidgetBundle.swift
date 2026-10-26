@@ -13,5 +13,8 @@ import SwiftUI
 struct BarkWidgetBundle: WidgetBundle {
     var body: some Widget {
         RecentMessagesWidget()
+        if #available(iOS 17.0, *) {
+            ShortcutLauncherWidget()
+        }
     }
 }
