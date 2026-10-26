@@ -21,7 +21,7 @@ ipad_model = root / "Controller" / "SectionViewModel-iPad.swift"
 # its application entry point in the generated copy.
 sources = list((vendor / "Deflector").rglob("*.swift"))
 sources += list((vendor / "Shared").rglob("*.swift"))
-skip = {"SystemAutomationDetectIntent.swift", "SendDeflectionNotificationIntent.swift", "DeflectionService.swift"}
+skip = {"SystemAutomationDetectIntent.swift", "SendDeflectionNotificationIntent.swift"}
 sources = [p for p in sources if p.name not in skip]
 sources.append(root / "Integration" / "App" / "ShortcutsHubNavigation.swift")
 for source in sources:
@@ -38,6 +38,9 @@ for source in sources:
             if content[end] == "}": depth -= 1
             end += 1
         content = content[:match.start()] + content[end:]
+    # Explicit color resolves SwiftUI's ambiguous inferred ShapeStyle in Bark.
+    if relative.startswith("Deflector/Views/"):
+        content = content.replace(".accent", "Color.accentColor")
     dest.write_text(content, encoding="utf-8")
     file_id = hashlib.sha256(("file:" + relative).encode()).hexdigest()[:24].upper()
     build_id = hashlib.sha256(("build:" + relative).encode()).hexdigest()[:24].upper()
