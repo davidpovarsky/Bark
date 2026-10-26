@@ -1,0 +1,17 @@
+//
+//  WidgetExtensionBundle.swift
+//  Deflector Widget Extension
+//
+//  Created by Cizzuk on 2026/08/14.
+//
+
+import WidgetKit
+import SwiftUI
+
+@main
+struct WidgetExtensionBundle: WidgetBundle {
+    var body: some Widget {
+        DeflectorActivityWidget()
+        ToggleActivityControl()
+    }
+}
