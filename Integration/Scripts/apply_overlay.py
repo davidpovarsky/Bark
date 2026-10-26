@@ -30,6 +30,8 @@ with info.open('wb') as f:
 # Inject generated app source references at build time only.
 project = root / 'Bark.xcodeproj' / 'project.pbxproj'
 pbx = project.read_text(encoding='utf-8')
+# Deflector upstream uses iOS 26 IntentModes; widget integration targets iOS 26+.
+pbx = pbx.replace('IPHONEOS_DEPLOYMENT_TARGET = 17.0;', 'IPHONEOS_DEPLOYMENT_TARGET = 26.0;')
 marker = '0661A543204FDA4100965E4E /* AppDelegate.swift in Sources */'
 assert pbx.count(marker) >= 2, 'AppDelegate source reference changed'
 files = [
@@ -46,6 +48,10 @@ for name, file_id, build_id in files:
     generated = app / (name + '.generated.swift')
     source = original_automation if name == 'DeflectorAutomationDetect' else integration / 'App' / (name + '.swift')
     shutil.copyfile(source, generated)
+    if name == 'DeflectorAutomationDetect':
+        content = generated.read_text(encoding='utf-8')
+        content = content.replace('struct SystemAutomationDetectIntent: AppIntent {', '@available(iOS 26.0, *)\nstruct SystemAutomationDetectIntent: AppIntent {')
+        generated.write_text(content, encoding='utf-8')
     if file_id in pbx:
         continue
     # Add to PBXFileReference and PBXBuildFile sections, Bark group and Bark target Sources.
