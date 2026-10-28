@@ -1,6 +1,11 @@
 name: Personal Apple signed IPA
 on:
   workflow_dispatch:
+    inputs:
+      upload_testflight:
+        description: "Upload the signed IPA to TestFlight"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -40,7 +45,7 @@ jobs:
           set -euo pipefail
           umask 077
           mkdir -p "$RUNNER_TEMP/signing" "$HOME/Library/MobileDevice/Provisioning Profiles"
-          echo "$CERT" | base64 --decode > "$RUNNER_TEMP/signing/distribution.p12"
+          echo "$CERT" | base64 -D > "$RUNNER_TEMP/signing/distribution.p12"
           security create-keychain -p "temp-signing-password" "$RUNNER_TEMP/signing.keychain-db"
           security unlock-keychain -p "temp-signing-password" "$RUNNER_TEMP/signing.keychain-db"
           security set-keychain-settings -lut 21600 "$RUNNER_TEMP/signing.keychain-db"
@@ -49,7 +54,7 @@ jobs:
           security list-keychains -d user -s "$RUNNER_TEMP/signing.keychain-db" "$HOME/Library/Keychains/login.keychain-db"
           for role in APP WIDGET SERVICE CONTENT; do
             variable="${role}_PROFILE"
-            echo "${!variable}" | base64 --decode > "$RUNNER_TEMP/signing/$role.mobileprovision"
+            echo "${!variable}" | base64 -D > "$RUNNER_TEMP/signing/$role.mobileprovision"
             security cms -D -i "$RUNNER_TEMP/signing/$role.mobileprovision" > "$RUNNER_TEMP/signing/$role.plist"
             ROLE="$role" python3 - <<'PY'
           import os, plistlib
@@ -135,8 +140,22 @@ jobs:
           path: Bark-personal-signed.ipa
           if-no-files-found: error
           retention-days: 7
+      - name: Upload to TestFlight (only when explicitly selected)
+        if: ${{ inputs.upload_testflight }}
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          test -n "$ASC_KEY_ID" && test -n "$ASC_ISSUER_ID" && test -n "$ASC_KEY_P8"
+          mkdir -p "$HOME/.private_keys"
+          chmod 700 "$HOME/.private_keys"
+          printf '%s' "$ASC_KEY_P8" > "$HOME/.private_keys/AuthKey_$ASC_KEY_ID.p8"
+          chmod 600 "$HOME/.private_keys/AuthKey_$ASC_KEY_ID.p8"
+          xcrun altool --upload-app -f "$RUNNER_TEMP/BarkExport/Bark.ipa" -t ios --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
       - name: Remove signing material
         if: always()
         run: |
           security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
-          rm -rf "$RUNNER_TEMP/signing" "$RUNNER_TEMP/ipa-inspection" "$RUNNER_TEMP/BarkExport"
+          rm -rf "$RUNNER_TEMP/signing" "$RUNNER_TEMP/ipa-inspection" "$RUNNER_TEMP/BarkExport" "$HOME/.private_keys"
