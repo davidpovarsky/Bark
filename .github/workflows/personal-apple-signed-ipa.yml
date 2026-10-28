@@ -1,0 +1,142 @@
+name: Personal Apple signed IPA
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  signed:
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v4
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Verify required credentials are configured
+        env:
+          CERT: ${{ secrets.APPLE_CERTIFICATE_P12_B64 }}
+          CERT_PASS: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APP_PROFILE: ${{ secrets.APPLE_MAIN_PROVISIONING_PROFILE_B64 }}
+          WIDGET_PROFILE: ${{ secrets.APPLE_WIDGETS_PROVISIONING_PROFILE_B64 }}
+          SERVICE_PROFILE: ${{ secrets.APPLE_SERVICE_PROVISIONING_PROFILE_B64 }}
+          CONTENT_PROFILE: ${{ secrets.APPLE_CONTENT_PROVISIONING_PROFILE_B64 }}
+        run: |
+          for name in CERT CERT_PASS APP_PROFILE WIDGET_PROFILE SERVICE_PROFILE CONTENT_PROFILE; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing required GitHub Actions secret for $name"
+              exit 1
+            fi
+          done
+      - name: Install signed profiles and temporary keychain
+        env:
+          CERT: ${{ secrets.APPLE_CERTIFICATE_P12_B64 }}
+          CERT_PASS: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APP_PROFILE: ${{ secrets.APPLE_MAIN_PROVISIONING_PROFILE_B64 }}
+          WIDGET_PROFILE: ${{ secrets.APPLE_WIDGETS_PROVISIONING_PROFILE_B64 }}
+          SERVICE_PROFILE: ${{ secrets.APPLE_SERVICE_PROVISIONING_PROFILE_B64 }}
+          CONTENT_PROFILE: ${{ secrets.APPLE_CONTENT_PROVISIONING_PROFILE_B64 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$RUNNER_TEMP/signing" "$HOME/Library/MobileDevice/Provisioning Profiles"
+          echo "$CERT" | base64 --decode > "$RUNNER_TEMP/signing/distribution.p12"
+          security create-keychain -p "temp-signing-password" "$RUNNER_TEMP/signing.keychain-db"
+          security unlock-keychain -p "temp-signing-password" "$RUNNER_TEMP/signing.keychain-db"
+          security set-keychain-settings -lut 21600 "$RUNNER_TEMP/signing.keychain-db"
+          security import "$RUNNER_TEMP/signing/distribution.p12" -k "$RUNNER_TEMP/signing.keychain-db" -P "$CERT_PASS" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "temp-signing-password" "$RUNNER_TEMP/signing.keychain-db"
+          security list-keychains -d user -s "$RUNNER_TEMP/signing.keychain-db" "$HOME/Library/Keychains/login.keychain-db"
+          for role in APP WIDGET SERVICE CONTENT; do
+            variable="${role}_PROFILE"
+            echo "${!variable}" | base64 --decode > "$RUNNER_TEMP/signing/$role.mobileprovision"
+            security cms -D -i "$RUNNER_TEMP/signing/$role.mobileprovision" > "$RUNNER_TEMP/signing/$role.plist"
+            ROLE="$role" python3 - <<'PY'
+          import os, plistlib
+          from pathlib import Path
+          role = os.environ["ROLE"]
+          path = Path(os.environ["RUNNER_TEMP"]) / "signing" / (role + ".plist")
+          p = plistlib.loads(path.read_bytes())
+          team = p["TeamIdentifier"][0]
+          expected = {"APP": "com.davidpovarsky.bark", "WIDGET": "com.davidpovarsky.bark.Widget", "SERVICE": "com.davidpovarsky.bark.NotificationServiceExtension", "CONTENT": "com.davidpovarsky.bark.NotificationContent"}[role]
+          ent = p["Entitlements"]
+          assert team == "NA6HPWARQ2", (role, team)
+          assert ent["application-identifier"] == team + "." + expected, (role, "bundle mismatch")
+          assert "group.com.davidpovarsky.bark" in ent.get("com.apple.security.application-groups", []), (role, "App Group missing")
+          assert not p.get("ProvisionedDevices") and not p.get("ProvisionsAllDevices"), (role, "Not App Store distribution")
+          if role == "APP":
+              assert ent.get("aps-environment") == "production", "Production APNs missing"
+          print(role, "validated", p["Name"])
+          with open(os.environ["GITHUB_ENV"], "a") as f:
+              f.write("BARK_PROFILE_" + role + "_NAME=" + p["Name"] + "\n")
+          PY
+            uuid=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$RUNNER_TEMP/signing/$role.plist")
+            cp "$RUNNER_TEMP/signing/$role.mobileprovision" "$HOME/Library/MobileDevice/Provisioning Profiles/$uuid.mobileprovision"
+          done
+      - name: Apply vendor-preserving integration overlays
+        env:
+          BARK_REQUIRE_PROFILES: "1"
+        run: |
+          python3 Integration/Scripts/apply_overlay.py
+          python3 Integration/Scripts/apply_ui_overlay.py
+          python3 Integration/Scripts/apply_signed_identity.py
+          python3 Integration/Scripts/verify_ui_overlay.py
+          python3 Integration/Scripts/verify_cleanup_overlay.py
+          git diff --exit-code -- Vendor/Deflector
+      - name: Install CocoaPods
+        run: pod install
+      - name: Archive signed iOS app
+        run: |
+          set -euo pipefail
+          xcodebuild -workspace Bark.xcworkspace -scheme Bark -configuration Release -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/Bark.xcarchive" CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Apple Distribution" DEVELOPMENT_TEAM=NA6HPWARQ2 archive
+      - name: Export signed IPA
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, plistlib
+          mapping = {
+            "com.davidpovarsky.bark": os.environ["BARK_PROFILE_APP_NAME"],
+            "com.davidpovarsky.bark.Widget": os.environ["BARK_PROFILE_WIDGET_NAME"],
+            "com.davidpovarsky.bark.NotificationServiceExtension": os.environ["BARK_PROFILE_SERVICE_NAME"],
+            "com.davidpovarsky.bark.NotificationContent": os.environ["BARK_PROFILE_CONTENT_NAME"],
+          }
+          opts = {"method": "app-store-connect", "signingStyle": "manual", "teamID": "NA6HPWARQ2", "provisioningProfiles": mapping, "uploadSymbols": False}
+          with open(os.environ["RUNNER_TEMP"] + "/signing/ExportOptions.plist", "wb") as f:
+            plistlib.dump(opts, f)
+          PY
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/Bark.xcarchive" -exportPath "$RUNNER_TEMP/BarkExport" -exportOptionsPlist "$RUNNER_TEMP/signing/ExportOptions.plist"
+          test -f "$RUNNER_TEMP/BarkExport/Bark.ipa"
+      - name: Verify exported app and extensions
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/ipa-inspection"
+          unzip -q "$RUNNER_TEMP/BarkExport/Bark.ipa" -d "$RUNNER_TEMP/ipa-inspection"
+          APP="$RUNNER_TEMP/ipa-inspection/Payload/Bark.app"
+          test -d "$APP"
+          codesign --verify --deep --strict "$APP"
+          for target in "$APP" "$APP"/PlugIns/*.appex; do
+            test -d "$target"
+            codesign --verify --strict "$target"
+            codesign -d --entitlements :- "$target" > "$RUNNER_TEMP/signing/check.plist" 2>/dev/null
+            python3 - "$RUNNER_TEMP/signing/check.plist" <<'PY'
+          import plistlib,sys
+          ent=plistlib.load(open(sys.argv[1],"rb"))
+          assert ent["com.apple.developer.team-identifier"] == "NA6HPWARQ2"
+          assert "group.com.davidpovarsky.bark" in ent["com.apple.security.application-groups"]
+          if ent["application-identifier"].endswith(".bark"):
+              assert ent["aps-environment"] == "production"
+          PY
+          done
+          cp "$RUNNER_TEMP/BarkExport/Bark.ipa" "$GITHUB_WORKSPACE/Bark-personal-signed.ipa"
+      - name: Upload signed IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Bark-personal-Apple-Developer-signed-IPA
+          path: Bark-personal-signed.ipa
+          if-no-files-found: error
+          retention-days: 7
+      - name: Remove signing material
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/signing.keychain-db" 2>/dev/null || true
+          rm -rf "$RUNNER_TEMP/signing" "$RUNNER_TEMP/ipa-inspection" "$RUNNER_TEMP/BarkExport"
